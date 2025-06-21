@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>幾A幾B猜數字遊戲</title>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #fdfdfd;
+      color: #333;
+      overflow-x: hidden;
+      touch-action: manipulation;
+      font-size: clamp(14px, 2vw, 16px);
+    }
+    .start-screen, .game-wrapper {
+      max-width: 900px;
+      width: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .start-screen {
+      background: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    select, input, button {
+      font-size: 16px;
+      padding: 8px 12px;
+      margin: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      cursor: pointer;
+      background-color: #007aff;
+      color: #fff;
+      border: none;
+    }
+    .player-names input {
+      display: block;
+      margin: 10px auto;
+      width: 80%;
+      max-width: 300px;
+    }
+    .team-inputs {
+      display: none;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .team-inputs input {
+      width: 120px;
+    }
+    .game-wrapper {
+      display: none;
+      flex-direction: column;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .left-panel, .right-panel {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    @media (min-width: 768px) {
+      .game-wrapper {
+        flex-direction: row;
+        height: 100vh;
+        max-height: 100vh;
+        overflow-y: auto;
+      }
+      .left-panel, .right-panel {
+        flex: 1;
+        padding: 20px;
+      }
+      .left-panel {
+        border-right: 1px solid #eee;
+      }
+    }
+    .log {
+      margin-top: 20px;
+      max-height: 50vh;
+      overflow-y: auto;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .notes {
+      width: 100%;
+      height: 150px;
+      font-size: 15px;
+      padding: 10px;
+    }
+    #gameArea, #endArea {
+      display: none;
+    }
+    #endArea {
+      margin-top: 20px;
+      background: #fafafa;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    #playerList {
+      font-weight: 500;
+      margin-bottom: 10px;
+    }
+    .player-stats {
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    .team-A {
+      color: red;
+    }
+    .team-B {
+      color: blue;
+    }
+    .right-panel {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="start-screen" id="startScreen">
+    <h1>幾A幾B 猜數字遊戲</h1>
+    <p>選擇幾位數：
+      <select id="digitCount">
+        <option value="3">3 位</option>
+        <option value="4" selected>4 位</option>
+        <option value="5">5 位</option>
+      </select>
+    </p>
+    <p>選擇玩家人數：
+      <select id="playerCount" onchange="renderNameInputs(); toggleModeAndNames();">
+        <option value="1">1 人</option>
+        <option value="2">2 人</option>
+        <option value="3">3 人</option>
+        <option value="4">4 人</option>
+      </select>
+    </p>
+    <div class="player-names" id="playerNames"></div>
+    <p id="modeSelection">遊戲模式：
+      <select id="gameMode">
+        <option value="battle">對戰</option>
+        <option value="co-op">合作</option>
+        <option value="teams">組隊對戰</option>
+      </select>
+    </p>
+    <div class="team-inputs" id="teamInputs">
+      <input type="text" id="teamAName" placeholder="隊伍 A 名稱" value="隊伍 A">
+      <input type="text" id="teamBName" placeholder="隊伍 B 名稱" value="隊伍 B">
+    </div>
+    <button onclick="startGame()">開始遊戲</button>
+  </div>
+
+  <div class="game-wrapper" id="gameWrapper">
+    <div class="left-panel">
+      <div id="playerList"></div>
+      <div class="player-stats" id="playerStats"></div>
+      <div id="gameArea">
+        <p>猜數字（<span id="currentPlayer"></span>）：
+          <input type="text" id="guess" maxlength="5">
+          <button onclick="checkGuess()">猜！</button>
+          <button onclick="resetGame()">重玩</button>
+        </p>
+        <div class="log" id="log"></div>
+      </div>
+      <div id="endArea">
+        <h3 id="endMessage"></h3>
+        <button onclick="resetGame()">再玩一次</button>
+      </div>
+    </div>
+    <div class="right-panel" id="notePanel">
+      <h3>筆記區</h3>
+      <div id="digitToggles"></div>
+      <textarea class="notes" placeholder="在這裡寫下筆記或紀錄..."></textarea>
+    </div>
+  </div>
+
+  <script>
+    let answer = "";
+    let attempts = 0;
+    let playerTurn = 1;
+    let players = [];
+    let gameMode = "battle";
+    let guessCounts = {};
+    let teamAName = "隊伍 A";
+    let teamBName = "隊伍 B";
+
+    window.onload = () => {
+      renderNameInputs();
+      toggleModeAndNames();
+      document.getElementById("gameWrapper").style.display = "none";
+      document.getElementById("notePanel").style.display = "none";
+
+      const playerNamesDiv = document.getElementById("playerNames");
+      playerNamesDiv.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const inputs = playerNamesDiv.querySelectorAll("input");
+          if (document.activeElement === inputs[inputs.length - 1]) {
+            startGame();
+          }
+        }
+      });
+
+      const firstInput = playerNamesDiv.querySelector("input");
+      if (firstInput) firstInput.focus();
+    };
+
+    function renderNameInputs() {
+      const container = document.getElementById("playerNames");
+      const count = parseInt(document.getElementById("playerCount").value);
+      container.innerHTML = "";
+
+      document.getElementById("modeSelection").style.display = count === 1 ? "none" : "block";
+      document.getElementById("teamInputs").style.display = "none";
+
+      for (let i = 1; i <= count; i++) {
+        container.innerHTML += `<input type="text" id="playerName${i}" placeholder="玩家 ${i} 名稱">`;
+      }
+
+      document.getElementById("gameMode").addEventListener("change", () => {
+        const mode = document.getElementById("gameMode").value;
+        document.getElementById("teamInputs").style.display = mode === "teams" ? "flex" : "none";
+      });
+    }
+
+    function toggleModeAndNames() {
+      const playerCount = parseInt(document.getElementById("playerCount").value);
+      document.getElementById("modeSelection").style.display = playerCount === 1 ? "none" : "block";
+      document.getElementById("playerNames").style.display = "block";
+    }
+
+    function startGame() {
+      const digitCount = parseInt(document.getElementById("digitCount").value);
+      const playerCount = parseInt(document.getElementById("playerCount").value);
+      gameMode = playerCount === 1 ? "solo" : document.getElementById("gameMode").value;
+
+      teamAName = document.getElementById("teamAName").value || "隊伍 A";
+      teamBName = document.getElementById("teamBName").value || "隊伍 B";
+
+      players = [];
+      guessCounts = {};
+      for (let i = 1; i <= playerCount; i++) {
+        const nameInput = document.getElementById(`playerName${i}`);
+        const name = nameInput && nameInput.value.trim() !== "" ? nameInput.value.trim() : `玩家 ${i}`;
+        players.push(name);
+        guessCounts[name] = 0;
+      }
+
+      document.getElementById("startScreen").style.display = "none";
+      document.getElementById("gameWrapper").style.display = "flex";
+      document.getElementById("gameArea").style.display = "block";
+      document.getElementById("endArea").style.display = "none";
+      document.getElementById("notePanel").style.display = "block";
+
+      answer = generateAnswer(digitCount);
+      attempts = 0;
+      playerTurn = 1;
+
+      renderDigitToggles(digitCount);
+
+      let playerListHTML = `<p>👥 玩家列表：${players.join("、")}</p>`;
+      if (gameMode === "teams") {
+        const half = Math.ceil(players.length / 2);
+        const teamA = players.slice(0, half).join("、");
+        const teamB = players.slice(half).join("、");
+        playerListHTML += `<p class="team-A">🔴 ${teamAName}：${teamA}</p><p class="team-B">🔵 ${teamBName}：${teamB}</p>`;
+      }
+      document.getElementById("playerList").innerHTML = playerListHTML;
+
+      updatePlayerStats();
+
+      document.getElementById("log").innerHTML = `<p>🎯 遊戲開始：請猜 ${digitCount} 位不重複的數字</p>`;
+      const guessInput = document.getElementById("guess");
+      guessInput.value = "";
+      guessInput.maxLength = digitCount;
+      document.getElementById("currentPlayer").innerText = players[playerTurn - 1];
+
+      guessInput.addEventListener("keypress", function(e) {
+        if (e.key === "Enter") checkGuess();
+      });
+    }
+
+    function generateAnswer(length) {
+      let digits = [..."0123456789"];
+      for (let i = digits.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [digits[i], digits[j]] = [digits[j], digits[i]];
+      }
+      return digits.slice(0, length).join('');
+    }
+
+    function updatePlayerStats() {
+      const statDiv = document.getElementById("playerStats");
+      statDiv.innerHTML = Object.entries(guessCounts).map(([name, count]) => `${name}：${count} 次`).join("<br>");
+    }
+
+    function checkGuess() {
+      const guessInput = document.getElementById("guess");
+      const guess = guessInput.value;
+      const digitCount = answer.length;
+
+      if (guess.length !== digitCount || new Set(guess).size !== digitCount || !/^[0-9]+$/.test(guess)) {
+        alert(`請輸入 ${digitCount} 位不重複的數字！`);
+        return;
+      }
+
+      const currentPlayerName = players[playerTurn - 1];
+      guessCounts[currentPlayerName]++;
+      updatePlayerStats();
+
+      let A = 0, B = 0;
+      for (let i = 0; i < digitCount; i++) {
+        if (guess[i] === answer[i]) A++;
+        else if (answer.includes(guess[i])) B++;
+      }
+
+      const logDiv = document.getElementById("log");
+      logDiv.innerHTML += `<p>🎮 ${currentPlayerName} 猜 ${guess} ➜ ${A}A${B}B</p>`;
+
+      if (A === digitCount) {
+        document.getElementById("gameArea").style.display = "none";
+        document.getElementById("endArea").style.display = "block";
+
+        let message = `🎉 ${currentPlayerName} 猜對了！答案是 ${answer}。`;
+        if (gameMode === "teams") {
+          const winnerIndex = players.indexOf(currentPlayerName);
+          const team = winnerIndex < Math.ceil(players.length / 2) ? `🔴 ${teamAName}` : `🔵 ${teamBName}`;
+          message = `${team} 勝利！🎉\n猜中者：${currentPlayerName}`;
+        }
+        document.getElementById("endMessage").innerText = message;
+      } else {
+        if (gameMode !== "co-op" && gameMode !== "solo") {
+          playerTurn = (playerTurn % players.length) + 1;
+          document.getElementById("currentPlayer").innerText = players[playerTurn - 1];
+          logDiv.innerHTML += `<p>🔁 換 ${players[playerTurn - 1]} 回合</p>`;
+        }
+      }
+
+      guessInput.value = "";
+    }
+
+    function renderDigitToggles(length) {
+      const digitToggles = document.getElementById("digitToggles");
+      digitToggles.innerHTML = "";
+
+      const allRow = document.createElement("div");
+      allRow.style.marginBottom = "10px";
+      allRow.innerHTML = `<strong>所有數字：</strong>`;
+      for (let d = 0; d <= 9; d++) {
+        const btn = document.createElement("button");
+        btn.textContent = d;
+        btn.style.margin = "2px";
+        btn.style.padding = "2px 6px";
+        btn.dataset.selected = "false";
+        btn.onclick = () => {
+          btn.dataset.selected = btn.dataset.selected === "true" ? "false" : "true";
+          btn.style.backgroundColor = btn.dataset.selected === "true" ? "#333" : "#fff";
+          btn.style.color = btn.dataset.selected === "true" ? "#fff" : "#000";
+        };
+        allRow.appendChild(btn);
+      }
+      digitToggles.appendChild(allRow);
+
+      for (let i = 0; i < length; i++) {
+        const row = document.createElement("div");
+        row.style.marginBottom = "6px";
+        row.innerHTML = `<strong>${i + 1} 位：</strong>`;
+        for (let d = 0; d <= 9; d++) {
+          const btn = document.createElement("button");
+          btn.textContent = d;
+          btn.style.margin = "2px";
+          btn.style.padding = "2px 6px";
+          btn.dataset.selected = "false";
+          btn.onclick = () => {
+            btn.dataset.selected = btn.dataset.selected === "true" ? "false" : "true";
+            btn.style.backgroundColor = btn.dataset.selected === "true" ? "#333" : "#fff";
+            btn.style.color = btn.dataset.selected === "true" ? "#fff" : "#000";
+          };
+          row.appendChild(btn);
+        }
+        digitToggles.appendChild(row);
+      }
+    }
+
+    function resetGame() {
+      document.getElementById("startScreen").style.display = "flex";
+      document.getElementById("gameWrapper").style.display = "none";
+      document.getElementById("notePanel").style.display = "none";
+    }
+  </script>
+</body>
+</html>
